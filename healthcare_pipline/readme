@@ -1,0 +1,267 @@
+1️⃣ Problem Statement
+
+We are dealing with a medical claims Accounts Payable (AP) process.
+
+Claims come from a claims system, but payment is not immediate.
+They must go through multiple steps involving:
+
+Claim submission
+
+Internal review
+
+Consolidation
+
+Treasury payment
+
+Treasury acknowledgment (success / failure)
+
+Core Challenges
+
+Claims change state over time
+
+Submitted → Under Review → Approved / Rejected
+
+Payment happens externally (Treasury)
+
+Feedback comes later via files
+
+Same claim must be updated, not duplicated
+
+System must always show the latest truth
+
+Pipeline should be restart-safe and idempotent
+
+Files can arrive late or be reprocessed
+
+Auditability and correctness are critical
+
+So the real problem is:
+
+How do we build a reliable, end-to-end medical claims AP system that can ingest files, update claim state correctly, interact with Treasury, and always expose the latest status?
+
+2️⃣ What We Are Trying to Solve
+
+We want to build a solution that:
+
+✔ Handles continuous file arrivals
+✔ Updates existing claims cleanly (UPSERT)
+✔ Supports two-direction data flow
+✔ Separates ingestion from business logic
+✔ Avoids duplicates and data corruption
+✔ Works in production scale
+
+In short:
+
+A robust, stateful claims payment system using modern Databricks patterns.
+
+3️⃣ Solution Overview (High Level)
+
+We designed the system around two logical cycles:
+
+✅ First Half Cycle – Send claims to Treasury
+✅ Second Half Cycle – Receive acknowledgment and finalize claims
+
+The entire system is built using:
+
+Delta Live Tables (DLT)
+
+Auto Loader
+
+SCD Type 1 (UPSERT)
+
+Clear Bronze → Silver → Gold flow
+
+4️⃣ First Half Cycle – Claim Intake → Payment Request
+🔹 Step 1: Claim Source Data Arrives
+
+We receive multiple claim-related files:
+
+Claim Header
+
+Claim Line
+
+Diagnosis
+
+Approval (Reviewer)
+
+These files are raw, file-based inputs.
+
+🔹 Step 2: Bronze Layer – Raw Ingestion
+
+What we did:
+
+Used Auto Loader
+
+Read files exactly as received
+
+No transformation, no validation
+
+Why:
+
+Preserve source data
+
+Handle incremental file arrival
+
+Auto schema tracking
+
+Restart-safe ingestion
+
+👉 Bronze acts as the system of record for source files
+
+🔹 Step 3: Silver Layer – Business State (SCD-1)
+
+This is the heart of the system.
+
+What problem exists here?
+
+Claims can be resent
+
+Updates may arrive later
+
+Same claim ID must not create duplicates
+
+What we did:
+
+Converted Silver tables to SCD Type 1 (UPSERT)
+
+Used dlt.create_auto_cdc_flow
+
+Introduced CDC staging tables
+
+Ensured:
+
+One row per business key
+
+Latest state always wins
+
+Design choice:
+
+Silver is an operational state layer, not a history layer.
+
+So:
+
+Claim Header = latest claim state
+
+Claim Lines / Diagnosis / Approval = latest version
+
+🔹 Step 4: Gold Layer – Treasury Payment Request
+
+Gold represents actionable business output.
+
+What we did:
+
+Joined Silver Claim Header
+
+Aggregated Claim Lines to compute payable amount
+
+Built one payment request per claim
+
+Created a Treasury-ready dataset
+
+👉 This Gold table is what we send out of Databricks to Treasury.
+
+✅ At this point, first half of the AP cycle is complete.
+
+5️⃣ Second Half Cycle – Treasury ACK → Final Settlement
+🔹 Step 5: Treasury Sends Payment ACK File
+
+Treasury sends back a file containing:
+
+Payment ID
+
+Claim ID
+
+Payment Status (Confirmed / Failed)
+
+Bank reference or failure reason
+
+Acknowledgment status
+
+This is the final authority on payment outcome.
+
+🔹 Step 6: Bronze – ACK Ingestion
+
+We again use:
+
+✅ Auto Loader
+✅ Bronze landing table
+
+ACK files are treated as external system truth, not transformations.
+
+🔹 Step 7: Silver – SCD-1 UPSERT from ACK
+
+This is where the system becomes complete.
+
+What we did:
+
+Mapped ACK status to claim lifecycle:
+
+SUCCESS → Approved / Paid
+
+REJECTED → Rejected / Not Paid
+
+Used Auto CDC again
+
+Updated the same Silver Claim Header table
+
+✅ No new claim rows
+✅ Same claim updated
+✅ Always one final state
+
+This ensures:
+
+The claim table always reflects the real-world payment outcome.
+
+🔹 Step 8: Gold – Final Truth
+
+Because Gold is derived from Silver:
+
+It automatically reflects:
+
+Approved claims
+
+Rejected claims
+
+Payment references
+
+Failure reasons
+
+Gold becomes the single source of truth for:
+
+Finance
+
+Reporting
+
+Audit
+
+Reconciliation
+
+6️⃣ Why This Is a Complete Solution
+
+This design solves all original problems:
+
+✅ Handles continuous files
+✅ Prevents duplicates
+✅ Supports retries and reprocessing
+✅ Keeps latest claim state
+✅ Clean separation of concerns
+✅ Works with external systems
+✅ Production-safe architecture
+✅ Easy to explain and extend
+
+7️⃣ Final Architecture Summary (One Slide)
+Claims Source Files
+        ↓
+Bronze (Auto Loader – Raw)
+        ↓
+Silver (SCD-1 – Operational State)
+        ↓
+Gold (Payment Requests)
+        ↓
+Treasury
+        ↓
+ACK Files
+        ↓
+Silver (UPSERT Final Status)
+        ↓
+Gold (Final Settlement Truth)

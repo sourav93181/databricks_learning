@@ -1,0 +1,87 @@
+bundle_init
+
+
+# -------------------------------
+# 1. Go to Project Root
+# -------------------------------
+cd /Workspace/Users/<your-user>/DEV/first_project_bundle
+
+
+# -------------------------------
+# 2. Validate Bundle
+# -------------------------------
+databricks bundle validate
+
+
+# -------------------------------
+# 3. Deploy Bundle to DEV
+# -------------------------------
+databricks bundle deploy --target dev
+
+
+# -------------------------------
+# 4. Run a JOB (DEV)
+# Replace <job-key> with your job name
+# Example: New_Job_Nov_27_2025_12_29_PM
+# -------------------------------
+databricks bundle run <job-key> --target dev
+
+
+# -------------------------------
+# 5. Run a PIPELINE (DEV)
+# Your pipeline key:
+# pipeline_repo_first_pipline
+# -------------------------------
+databricks bundle run pipeline_repo_first_pipline --target dev
+
+
+# -------------------------------
+# 6. List All Resources
+# -------------------------------
+databricks bundle resources
+
+
+# -------------------------------
+# 7. Preview What Will Deploy
+# -------------------------------
+databricks bundle plan --target dev
+
+
+# -------------------------------
+# 8. Deploy Bundle to PROD
+# -------------------------------
+databricks bundle deploy --target prod
+
+
+# -------------------------------
+# 9. Run JOB in PROD
+# -------------------------------
+databricks bundle run <job-key> --target prod
+
+
+# -------------------------------
+# 10. Run PIPELINE in PROD
+# -------------------------------
+databricks bundle run pipeline_repo_first_pipline --target prod
+
+
+# -------------------------------
+# 11. Destroy Deployment
+# -------------------------------
+databricks bundle destroy --target dev
+databricks bundle destroy --target prod
+
+
+# -------------------------------
+# 12. Switch Default Target
+# -------------------------------
+databricks bundle configure --target dev
+
+
+# -------------------------------
+# 13. Check Auth & Workspace
+# -------------------------------
+databricks auth whoami
+databricks workspace ls /
+
+
